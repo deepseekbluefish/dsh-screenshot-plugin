@@ -1,0 +1,9 @@
+# dsh bundle layer: mount the in-app screenshot plugin.
+# The save folder defaults to ~/Pictures/DSH-Screenshots; override it per
+# profile with an id-targeted config row, for example:
+#   - id: screenshot
+#     config:
+#       folder: 'D:\\MyScreenshots'
+- insert:
+    - id: screenshot
+      name: 'dsh-screenshot-plugin'
