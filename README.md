@@ -47,3 +47,10 @@ dsh plugin --profile web add github:<owner>/dsh-screenshot-plugin
 ## License
 
 [MIT](LICENSE)
+
+## 常见问题
+
+- **点了按钮没反应？** 确认在会话输入框左侧能看到 ?；该按钮走宿主路由，TUI/无 webServer 的部署不会显示。
+- **截图保存了但输入框没标记？** 查看按钮弹出的提示（成功/失败都有提示）。标记是纯 ASCII `[Shot N HH:mm]`，可手动发送。
+- **agent 怎么读截图？** 发送标记后，配了视觉引擎的 agent（如 ModLens）可按编号与时间定位 `截屏N_HHmm.png`。
+- **文件名为什么带"截屏"而标记是 ASCII？** 文件名便于在文件夹中辨认；标记用 ASCII 是为了避免聊天输入/传输中的编码问题。
