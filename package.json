@@ -2,7 +2,10 @@
   "name": "dsh-screenshot-plugin",
   "version": "1.0.0",
   "type": "module",
-  "private": true,
+  "description": "WeChat-style in-app screenshot button for DeepSeek Harness: drag to capture a screen region, PNG saved with auto-numbering, marker [Shot N HH:mm] written into the composer.",
+  "license": "MIT",
+  "keywords": ["deepseek", "harness", "dsh", "dsh-plugin", "screenshot", "capture", "screen"],
+  "files": ["lib", "client", "cordis.patch.yml", "LICENSE", "README.md", "README.en.md"],
   "exports": {
     ".": "./lib/index.js",
     "./package.json": "./package.json",
