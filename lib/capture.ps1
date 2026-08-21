@@ -185,7 +185,6 @@ $maxH = $vs.Height
 
 $GREEN = [System.Drawing.Color]::FromArgb(255, 0, 255, 0)
 $WHITE = [System.Drawing.Color]::White
-$DARK  = [System.Drawing.Color]::FromArgb(255, 30, 30, 30)
 
 # ---------------- veil (receives all input) ----------------
 $ov = New-Object System.Windows.Forms.Form
@@ -248,16 +247,15 @@ $frame.Add_Paint({
             $g.DrawRectangle($pen, $xx - 3, $yy - 3, 7, 7)
         }
     }
-    # hint strip
+    # hint text: no background panel, black offset shadow for readability
     $hint = 'Double-click / Enter: confirm    Esc: cancel'
     $font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
-    $size = $g.MeasureString($hint, $font)
     $tx = $m
     $ty = if ($pad -eq $m) { $pad + $r.H + 6 } else { 2 }
-    $darkBrush = New-Object System.Drawing.SolidBrush($DARK)
-    $g.FillRectangle($darkBrush, $tx, $ty, [int]$size.Width + 12, [int]$size.Height + 4)
+    $shadowBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::Black)
+    $g.DrawString($hint, $font, $shadowBrush, $tx + 7, $ty + 3)
     $g.DrawString($hint, $font, $whiteBrush, $tx + 6, $ty + 2)
-    $font.Dispose(); $pen.Dispose(); $penBrush.Dispose(); $whiteBrush.Dispose(); $darkBrush.Dispose()
+    $font.Dispose(); $pen.Dispose(); $penBrush.Dispose(); $whiteBrush.Dispose(); $shadowBrush.Dispose()
 })
 
 function Confirm-Capture {
