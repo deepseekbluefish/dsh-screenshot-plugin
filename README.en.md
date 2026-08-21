@@ -17,9 +17,10 @@ Restart DSH (or your client) and the ✂ button appears next to the composer inp
 ## Usage
 
 1. Click **✂** — the screen dims
-2. Drag to select a region, release to capture (Esc cancels)
-3. `[Shot N HH:mm]` appears in the input box
-4. Send it — with a vision plugin such as [ModLens](https://github.com/liustack/modlens) your agent can read the screenshot
+2. Drag to draw a selection; **the frame stays after release** — drag inside to move it, drag the 8 edge/corner handles to resize
+3. **Double-click the selection (or press Enter) to capture**, Esc cancels
+4. `[Shot N HH:mm]` appears in the input box
+5. Send it — with a vision plugin such as [ModLens](https://github.com/liustack/modlens) your agent can read the screenshot
 
 ## Configuration
 
