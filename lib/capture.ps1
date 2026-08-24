@@ -29,9 +29,6 @@ using System.Runtime.InteropServices;
 public static class DpiH {
     [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
 }
-public class SnipOverlay : System.Windows.Forms.Form {
-    public SnipOverlay() { this.DoubleBuffered = true; }
-}
 "@
 [DpiH]::SetProcessDPIAware() | Out-Null
 
@@ -171,6 +168,7 @@ $script:dragRect = $null
 $script:dragEdge = $null
 $script:captured = $false
 $script:result = $null
+$script:lastInvalid = $null   # previous painted rect, for region-scoped repaint
 
 $vs = [System.Windows.Forms.SystemInformation]::VirtualScreen
 $maxW = $vs.Width
@@ -189,7 +187,10 @@ $dimBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArg
 $g0.FillRectangle($dimBrush, 0, 0, $maxW, $maxH)
 $g0.Dispose(); $dimBrush.Dispose()
 
-$ov = New-Object SnipOverlay
+$ov = New-Object System.Windows.Forms.Form
+# Enable double buffering without compiling a C# subclass (faster startup).
+$dbProp = [System.Windows.Forms.Control].GetProperty('DoubleBuffered', [System.Reflection.BindingFlags]'Instance, NonPublic')
+$dbProp.SetValue($ov, $true, $null)
 $ov.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::None
 $ov.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
 $ov.Bounds = $vs
@@ -198,6 +199,21 @@ $ov.ShowInTaskbar = $false
 $ov.BackgroundImage = $shot
 $ov.BackgroundImageLayout = [System.Windows.Forms.ImageLayout]::None
 $ov.Cursor = [System.Windows.Forms.Cursors]::Cross
+
+# Invalidate only the old and new frame areas instead of the whole overlay:
+# the background is huge on multi-monitor setups and full repaints lag.
+function Invalidate-Frame {
+    $margin = 12
+    if ($null -ne $script:lastInvalid) {
+        $r1 = $script:lastInvalid
+        $ov.Invalidate((New-Object System.Drawing.Rectangle([int]($r1.X - $margin), [int]($r1.Y - $margin), [int]($r1.W + 2 * $margin), [int]($r1.H + 2 * $margin))))
+    }
+    if ($null -ne $script:rect) {
+        $r2 = $script:rect
+        $ov.Invalidate((New-Object System.Drawing.Rectangle([int]($r2.X - $margin), [int]($r2.Y - $margin), [int]($r2.W + 2 * $margin), [int]($r2.H + 2 * $margin))))
+    }
+    $script:lastInvalid = if ($null -ne $script:rect) { Copy-Rect $script:rect } else { $null }
+}
 
 $ov.Add_Paint({
     param($s, $e)
@@ -264,7 +280,7 @@ $ov.Add_MouseDown({
             $script:rect = $null
             $script:selStart = New-Object System.Drawing.Point($px, $py)
             $script:selCur = $script:selStart
-            $ov.Invalidate()
+            Invalidate-Frame
         }
         return
     }
@@ -273,7 +289,7 @@ $ov.Add_MouseDown({
     $script:rect = $null
     $script:selStart = New-Object System.Drawing.Point($px, $py)
     $script:selCur = $script:selStart
-    $ov.Invalidate()
+    Invalidate-Frame
 })
 $ov.Add_MouseMove({
     param($s, $e)
@@ -285,21 +301,21 @@ $ov.Add_MouseMove({
         $w = [Math]::Abs($script:selCur.X - $script:selStart.X)
         $h = [Math]::Abs($script:selCur.Y - $script:selStart.Y)
         $script:rect = Clamp-Rect (New-Rect $x $y $w $h) $maxW $maxH
-        $ov.Invalidate()
+        Invalidate-Frame
         return
     }
     if ($script:mode -eq 'moving') {
         $dx = $px - $script:dragBase.X
         $dy = $py - $script:dragBase.Y
         $script:rect = Apply-Move $script:dragRect $dx $dy $maxW $maxH
-        $ov.Invalidate()
+        Invalidate-Frame
         return
     }
     if ($script:mode -eq 'resizing') {
         $dx = $px - $script:dragBase.X
         $dy = $py - $script:dragBase.Y
         $script:rect = Apply-Resize $script:dragRect $script:dragEdge $dx $dy $maxW $maxH
-        $ov.Invalidate()
+        Invalidate-Frame
         return
     }
     if ($script:mode -eq 'adjust' -and $null -ne $script:rect) {
@@ -331,7 +347,7 @@ $ov.Add_MouseUp({
             $script:mode = 'none'
         }
         $script:selStart = $null; $script:selCur = $null
-        $ov.Invalidate()
+        Invalidate-Frame
         $ov.Activate()
         return
     }
@@ -366,7 +382,7 @@ if ($DemoRect -ne '') {
     if ($parts.Count -ge 4) {
         $script:rect = New-Rect ([int]$parts[0]) ([int]$parts[1]) ([int]$parts[2]) ([int]$parts[3])
         $script:mode = 'adjust'
-        $ov.Invalidate()
+        Invalidate-Frame
         $demoTimer = New-Object System.Windows.Forms.Timer
         $demoTimer.Interval = 1200
         $demoTimer.Add_Tick({
