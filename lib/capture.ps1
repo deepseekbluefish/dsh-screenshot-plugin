@@ -27,6 +27,11 @@ public static class DpiH {
 // A click-through, non-activating window: mouse input falls through to the
 // veil below while the drawn frame stays crisp and undimmed.
 public class PassThroughFrame : System.Windows.Forms.Form {
+    // Show without taking keyboard focus, so Enter/Esc keep going to the veil.
+    public void ShowPassive() {
+        this.ShowWithoutActivation = true;
+        this.Show();
+    }
     protected override System.Windows.Forms.CreateParams CreateParams {
         get {
             System.Windows.Forms.CreateParams cp = base.CreateParams;
@@ -222,7 +227,7 @@ function Update-Frame {
     if (-not $hintBelow) { $fh = $r.H + $script:frameTopPad + $FRAME_MARGIN }
     $frame.SetBounds($fx, $fy, $fw, $fh)
     $frame.Invalidate()
-    if (-not $frame.Visible) { $frame.Show() }
+    if (-not $frame.Visible) { $frame.ShowPassive() }
 }
 
 $frame.Add_Paint({
@@ -367,11 +372,14 @@ $ov.Add_MouseUp({
         }
         $script:selStart = $null; $script:selCur = $null
         Update-Frame
+        # Make sure keyboard focus is back on the veil so Enter/Esc work right away.
+        $ov.Activate()
         return
     }
     if ($script:mode -eq 'moving' -or $script:mode -eq 'resizing') {
         $script:mode = 'adjust'
         $script:dragBase = $null; $script:dragRect = $null; $script:dragEdge = $null
+        $ov.Activate()
         return
     }
 })
