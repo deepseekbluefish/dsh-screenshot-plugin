@@ -27,10 +27,12 @@ public static class DpiH {
 // A click-through, non-activating window: mouse input falls through to the
 // veil below while the drawn frame stays crisp and undimmed.
 public class PassThroughFrame : System.Windows.Forms.Form {
+    [DllImport("user32.dll")] static extern bool ShowWindow(System.IntPtr hWnd, int nCmdShow);
     // Show without taking keyboard focus, so Enter/Esc keep going to the veil.
     public void ShowPassive() {
-        this.ShowWithoutActivation = true;
-        this.Show();
+        if (!this.IsHandleCreated) { this.CreateControl(); }
+        this.Visible = true;
+        ShowWindow(this.Handle, 4); // SW_SHOWNOACTIVATE
     }
     protected override System.Windows.Forms.CreateParams CreateParams {
         get {
