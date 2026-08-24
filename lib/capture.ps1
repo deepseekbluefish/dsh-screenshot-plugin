@@ -221,7 +221,7 @@ $ov.Add_Paint({
     $g = $e.Graphics
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $r = $script:rect
-    $pen = New-Object System.Drawing.Pen($GREEN, 3)
+    $pen = New-Object System.Drawing.Pen($GREEN, 2)
     $whiteBrush = New-Object System.Drawing.SolidBrush($WHITE)
     # border
     $g.DrawRectangle($pen, [int]$r.X, [int]$r.Y, [int]$r.W, [int]$r.H)
@@ -232,8 +232,8 @@ $ov.Add_Paint({
         foreach ($xx in $hx) {
             if (($xx -eq [int]$r.X -or $xx -eq [int]($r.X + $r.W)) -or
                 ($yy -eq [int]$r.Y -or $yy -eq [int]($r.Y + $r.H))) {
-                $g.FillRectangle($whiteBrush, $xx - 3, $yy - 3, 7, 7)
-                $g.DrawRectangle($pen, $xx - 3, $yy - 3, 7, 7)
+                $g.FillRectangle($whiteBrush, $xx - 2.5, $yy - 2.5, 5, 5)
+                $g.DrawRectangle($pen, $xx - 2.5, $yy - 2.5, 5, 5)
             }
         }
     }
