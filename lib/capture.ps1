@@ -10,7 +10,7 @@
 #            corners (8 handles) to resize
 #   double-click inside the frame or press Enter: confirm and capture
 #   Esc: cancel
-param([string]$Folder = 'C:\Users\Public\Pictures\DSH-Screenshots', [switch]$SelfTest)
+param([string]$Folder = 'C:\Users\Public\Pictures\DSH-Screenshots', [switch]$SelfTest, [string]$DemoRect = '')
 $ErrorActionPreference = 'Stop'
 
 # CJK constant via char codes (Jie=U+622A, Ping=U+5C4F) - filename prefix only.
@@ -194,6 +194,7 @@ $WHITE = [System.Drawing.Color]::White
 
 # ---------------- veil (receives all input) ----------------
 $ov = New-Object System.Windows.Forms.Form
+$ov.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::None
 $ov.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
 $ov.Bounds = $vs
 $ov.TopMost = $true
@@ -204,6 +205,7 @@ $ov.Cursor = [System.Windows.Forms.Cursors]::Cross
 
 # ---------------- frame (crisp bright-green frame, click-through) ----------------
 $frame = New-Object PassThroughFrame
+$frame.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::None
 $frame.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
 $frame.ShowInTaskbar = $false
 $frame.TopMost = $true
@@ -390,6 +392,19 @@ $ov.Add_KeyDown({
         Confirm-Capture
     }
 })
+
+# ---------------- demo mode: show a preset rect for visual inspection ----------------
+if ($DemoRect -ne '') {
+    $parts = $DemoRect -split ','
+    if ($parts.Count -ge 4) {
+        $script:rect = New-Rect ([int]$parts[0]) ([int]$parts[1]) ([int]$parts[2]) ([int]$parts[3])
+        $script:mode = 'adjust'
+        $demoTimer = New-Object System.Windows.Forms.Timer
+        $demoTimer.Interval = 3000
+        $demoTimer.Add_Tick({ $demoTimer.Stop(); $ov.Close() })
+        $demoTimer.Start()
+    }
+}
 
 $ov.Show()
 $ov.Activate()
