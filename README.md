@@ -7,6 +7,17 @@ DeepSeek Harness 界面内的**微信式一键框选截屏**插件：对话输�
 - 标记 `[Shot N HH:mm]` 自动写入输入框（发送后 agent 可按标记定位文件读取）
 - 纯 ASCII 标记，无编码坑
 
+## 多语言简介 / Intro
+
+- **简体中文**：微信式一键框选截屏插件：拖动框选、8 个手柄微调，Enter 确认截取、Esc 取消；PNG 自动编号保存，`[Shot N HH:mm]` 标记自动填入输入框。已在 DeepSeek Harness Desktop 实测。
+- **繁體中文**：微信式一鍵框選截圖外掛：拖曳框選、8 個控點微調，Enter 確認截取、Esc 取消；PNG 自動編號儲存，`[Shot N HH:mm]` 標記自動填入輸入框。已在 DeepSeek Harness Desktop 實測。
+- **English**: WeChat-style one-click screenshot plugin: drag to select, fine-tune with 8 resize handles; press Enter to capture (the `[Shot N HH:mm]` marker is filled into the composer), Esc to cancel. PNGs are auto-numbered. Tested on DeepSeek Harness Desktop.
+- **Русский**: Плагин скриншотов в стиле WeChat: выделите область перетаскиванием, подправьте с помощью 8 маркеров; Enter — снять скриншот (метка `[Shot N HH:mm]` подставляется в поле ввода), Esc — отмена. PNG сохраняются с автонумерацией. Проверено на DeepSeek Harness Desktop.
+- **Français** : Capture d'écran façon WeChat : sélectionnez à la souris, ajustez avec 8 poignées ; Entrée pour capturer (le marqueur `[Shot N HH:mm]` est inséré dans la zone de saisie), Échap pour annuler. PNG numérotés automatiquement. Testé sur DeepSeek Harness Desktop.
+- **Italiano**: Plugin di screenshot stile WeChat: seleziona trascinando, regola con 8 maniglie; Invio per catturare (il marcatore `[Shot N HH:mm]` viene inserito nel campo di input), Esc per annullare. PNG con numerazione automatica. Testato su DeepSeek Harness Desktop.
+- **日本語**: WeChat 風のワンクリックスクリーンショットプラグイン：ドラッグで範囲選択、8 つのハンドルで微調整。Enter で撮影（`[Shot N HH:mm]` マーカーが入力欄に自動挿入）、Esc でキャンセル。PNG は自動連番で保存。DeepSeek Harness Desktop で動作確認済み。
+- **한국어**: WeChat 스타일 원클릭 스크린샷 플러그인: 드래그로 영역 선택, 8개 핸들로 미세 조정. Enter로 캡처(`[Shot N HH:mm]` 마커가 입력창에 자동 입력), Esc로 취소. PNG 자동 번호 저장. DeepSeek Harness Desktop에서 테스트 완료.
+
 ## 安装
 
 ```sh
