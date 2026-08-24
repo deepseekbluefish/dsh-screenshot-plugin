@@ -1,7 +1,7 @@
 # capture.ps1 - host-side capture script for the DSH in-app screenshot plugin.
 # STRICTLY ASCII: Windows PowerShell 5.1 reads non-BOM UTF-8 as ANSI and can
 # swallow newlines after multi-byte chars, eating code lines. No non-ASCII here.
-# Params: -Folder <save dir> [-SelfTest] ; stdout emits JSON:
+# Params: -Folder <save dir> [-SelfTest] [-DemoRect "x,y,w,h"] ; stdout emits JSON:
 #   {ok:true,file,path,marker} on capture, {ok:false,cancelled:true} on cancel.
 #
 # Interaction model:
@@ -10,6 +10,11 @@
 #            corners (8 handles) to resize
 #   double-click inside the frame or press Enter: confirm and capture
 #   Esc: cancel
+#
+# Architecture: ONE window only. The overlay paints a darkened screenshot of
+# the screen as its background and draws the frame in the same client
+# coordinates the mouse events and CopyFromScreen use, so any cross-window
+# misalignment is impossible by construction.
 param([string]$Folder = 'C:\Users\Public\Pictures\DSH-Screenshots', [switch]$SelfTest, [string]$DemoRect = '')
 $ErrorActionPreference = 'Stop'
 
@@ -24,24 +29,8 @@ using System.Runtime.InteropServices;
 public static class DpiH {
     [DllImport("user32.dll")] public static extern bool SetProcessDPIAware();
 }
-// A click-through, non-activating window: mouse input falls through to the
-// veil below while the drawn frame stays crisp and undimmed.
-public class PassThroughFrame : System.Windows.Forms.Form {
-    [DllImport("user32.dll")] static extern bool ShowWindow(System.IntPtr hWnd, int nCmdShow);
-    // Show without taking keyboard focus, so Enter/Esc keep going to the veil.
-    public void ShowPassive() {
-        if (!this.IsHandleCreated) { this.CreateControl(); }
-        this.Visible = true;
-        ShowWindow(this.Handle, 4); // SW_SHOWNOACTIVATE
-    }
-    protected override System.Windows.Forms.CreateParams CreateParams {
-        get {
-            System.Windows.Forms.CreateParams cp = base.CreateParams;
-            cp.ExStyle |= 0x00000020; // WS_EX_TRANSPARENT
-            cp.ExStyle |= 0x08000000; // WS_EX_NOACTIVATE
-            return cp;
-        }
-    }
+public class SnipOverlay : System.Windows.Forms.Form {
+    public SnipOverlay() { this.DoubleBuffered = true; }
 }
 "@
 [DpiH]::SetProcessDPIAware() | Out-Null
@@ -50,7 +39,6 @@ public class PassThroughFrame : System.Windows.Forms.Form {
 $HANDLE = 7     # hit tolerance around edges and corners, px
 $MIN_W  = 20    # minimum selection size, px
 $MIN_H  = 20
-$FRAME_MARGIN = 14   # frame form padding around the selection
 
 function New-Rect([int]$x, [int]$y, [int]$w, [int]$h) {
     return @{ X = $x; Y = $y; W = $w; H = $h }
@@ -173,7 +161,7 @@ function Save-And-Emit([System.Drawing.Bitmap]$bmp) {
     return @{ ok = $true; file = $name; path = $path; marker = $marker }
 }
 
-# ---------------- UI state ----------------
+# ---------------- state ----------------
 $script:mode = 'none'      # none | drawing | adjust | moving | resizing
 $script:rect = $null       # current selection: hashtable X Y W H
 $script:selStart = $null
@@ -183,7 +171,6 @@ $script:dragRect = $null
 $script:dragEdge = $null
 $script:captured = $false
 $script:result = $null
-$script:frameTopPad = $FRAME_MARGIN   # local Y of the rect inside the frame form
 
 $vs = [System.Windows.Forms.SystemInformation]::VirtualScreen
 $maxW = $vs.Width
@@ -192,72 +179,53 @@ $maxH = $vs.Height
 $GREEN = [System.Drawing.Color]::FromArgb(255, 0, 255, 0)
 $WHITE = [System.Drawing.Color]::White
 
-# ---------------- veil (receives all input) ----------------
-$ov = New-Object System.Windows.Forms.Form
+# ---------------- overlay (the only window) ----------------
+# Background = the real screen snapshot darkened, so the screen stays visible
+# through a dim layer while everything else draws in the same coordinate space.
+$shot = New-Object System.Drawing.Bitmap([int]$maxW, [int]$maxH)
+$g0 = [System.Drawing.Graphics]::FromImage($shot)
+$g0.CopyFromScreen($vs.Location, [System.Drawing.Point]::Empty, $vs.Size)
+$dimBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::FromArgb(165, 0, 0, 0))
+$g0.FillRectangle($dimBrush, 0, 0, $maxW, $maxH)
+$g0.Dispose(); $dimBrush.Dispose()
+
+$ov = New-Object SnipOverlay
 $ov.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::None
 $ov.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
 $ov.Bounds = $vs
 $ov.TopMost = $true
 $ov.ShowInTaskbar = $false
-$ov.BackColor = [System.Drawing.Color]::Black
-$ov.Opacity = 0.35
+$ov.BackgroundImage = $shot
+$ov.BackgroundImageLayout = [System.Windows.Forms.ImageLayout]::None
 $ov.Cursor = [System.Windows.Forms.Cursors]::Cross
 
-# ---------------- frame (crisp bright-green frame, click-through) ----------------
-$frame = New-Object PassThroughFrame
-$frame.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::None
-$frame.FormBorderStyle = [System.Windows.Forms.FormBorderStyle]::None
-$frame.ShowInTaskbar = $false
-$frame.TopMost = $true
-$frame.StartPosition = [System.Windows.Forms.FormStartPosition]::Manual
-$frame.BackColor = [System.Drawing.Color]::Magenta
-$frame.TransparencyKey = [System.Drawing.Color]::Magenta
-$frame.Hide()
-
-function Update-Frame {
-    if ($null -eq $script:rect) {
-        if ($frame.Visible) { $frame.Hide() }
-        return
-    }
-    $r = $script:rect
-    $script:frameTopPad = $FRAME_MARGIN
-    $fx = $vs.Left + $r.X - $FRAME_MARGIN
-    $fy = $vs.Top + $r.Y - $script:frameTopPad
-    $fw = $r.W + 2 * $FRAME_MARGIN
-    $fh = $r.H + 2 * $FRAME_MARGIN
-    $frame.SetBounds($fx, $fy, $fw, $fh)
-    $frame.Invalidate()
-    if (-not $frame.Visible) { $frame.ShowPassive() }
-}
-
-$frame.Add_Paint({
+$ov.Add_Paint({
     param($s, $e)
     if ($null -eq $script:rect) { return }
     $g = $e.Graphics
     $g.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::AntiAlias
     $r = $script:rect
-    $pad = $script:frameTopPad
-    $m = $FRAME_MARGIN
     $pen = New-Object System.Drawing.Pen($GREEN, 3)
-    $penBrush = New-Object System.Drawing.SolidBrush($GREEN)
     $whiteBrush = New-Object System.Drawing.SolidBrush($WHITE)
     # border
-    $g.DrawRectangle($pen, $m, $pad, $r.W, $r.H)
-    # 8 handles (corners + edge midpoints)
-    $hx = @($m, $m + [int]($r.W / 2), $m + $r.W)
-    $hy = @($pad, $pad + [int]($r.H / 2), $pad + $r.H)
+    $g.DrawRectangle($pen, [int]$r.X, [int]$r.Y, [int]$r.W, [int]$r.H)
+    # 8 handles (4 corners + 4 edge midpoints, no center)
+    $hx = @([int]$r.X, [int]($r.X + $r.W / 2), [int]($r.X + $r.W))
+    $hy = @([int]$r.Y, [int]($r.Y + $r.H / 2), [int]($r.Y + $r.H))
     foreach ($yy in $hy) {
         foreach ($xx in $hx) {
-            $g.FillRectangle($whiteBrush, $xx - 3, $yy - 3, 7, 7)
-            $g.DrawRectangle($pen, $xx - 3, $yy - 3, 7, 7)
+            if (($xx -eq [int]$r.X -or $xx -eq [int]($r.X + $r.W)) -or
+                ($yy -eq [int]$r.Y -or $yy -eq [int]($r.Y + $r.H))) {
+                $g.FillRectangle($whiteBrush, $xx - 3, $yy - 3, 7, 7)
+                $g.DrawRectangle($pen, $xx - 3, $yy - 3, 7, 7)
+            }
         }
     }
-    $pen.Dispose(); $penBrush.Dispose(); $whiteBrush.Dispose()
+    $pen.Dispose(); $whiteBrush.Dispose()
 })
 
 function Confirm-Capture {
     $ov.Hide()
-    $frame.Hide()
     $r = $script:rect
     if ($null -ne $r -and $r.W -ge $MIN_W -and $r.H -ge $MIN_H) {
         $bmp = New-Object System.Drawing.Bitmap([int]$r.W, [int]$r.H)
@@ -271,7 +239,7 @@ function Confirm-Capture {
     $ov.Close()
 }
 
-# ---------------- veil events ----------------
+# ---------------- overlay events ----------------
 $ov.Add_MouseDown({
     param($s, $e)
     if ($e.Button -ne [System.Windows.Forms.MouseButtons]::Left) { return }
@@ -296,7 +264,7 @@ $ov.Add_MouseDown({
             $script:rect = $null
             $script:selStart = New-Object System.Drawing.Point($px, $py)
             $script:selCur = $script:selStart
-            Update-Frame
+            $ov.Invalidate()
         }
         return
     }
@@ -305,7 +273,7 @@ $ov.Add_MouseDown({
     $script:rect = $null
     $script:selStart = New-Object System.Drawing.Point($px, $py)
     $script:selCur = $script:selStart
-    Update-Frame
+    $ov.Invalidate()
 })
 $ov.Add_MouseMove({
     param($s, $e)
@@ -317,21 +285,21 @@ $ov.Add_MouseMove({
         $w = [Math]::Abs($script:selCur.X - $script:selStart.X)
         $h = [Math]::Abs($script:selCur.Y - $script:selStart.Y)
         $script:rect = Clamp-Rect (New-Rect $x $y $w $h) $maxW $maxH
-        Update-Frame
+        $ov.Invalidate()
         return
     }
     if ($script:mode -eq 'moving') {
         $dx = $px - $script:dragBase.X
         $dy = $py - $script:dragBase.Y
         $script:rect = Apply-Move $script:dragRect $dx $dy $maxW $maxH
-        Update-Frame
+        $ov.Invalidate()
         return
     }
     if ($script:mode -eq 'resizing') {
         $dx = $px - $script:dragBase.X
         $dy = $py - $script:dragBase.Y
         $script:rect = Apply-Resize $script:dragRect $script:dragEdge $dx $dy $maxW $maxH
-        Update-Frame
+        $ov.Invalidate()
         return
     }
     if ($script:mode -eq 'adjust' -and $null -ne $script:rect) {
@@ -363,8 +331,7 @@ $ov.Add_MouseUp({
             $script:mode = 'none'
         }
         $script:selStart = $null; $script:selCur = $null
-        Update-Frame
-        # Make sure keyboard focus is back on the veil so Enter/Esc work right away.
+        $ov.Invalidate()
         $ov.Activate()
         return
     }
@@ -399,9 +366,14 @@ if ($DemoRect -ne '') {
     if ($parts.Count -ge 4) {
         $script:rect = New-Rect ([int]$parts[0]) ([int]$parts[1]) ([int]$parts[2]) ([int]$parts[3])
         $script:mode = 'adjust'
+        $ov.Invalidate()
         $demoTimer = New-Object System.Windows.Forms.Timer
-        $demoTimer.Interval = 3000
-        $demoTimer.Add_Tick({ $demoTimer.Stop(); $ov.Close() })
+        $demoTimer.Interval = 1200
+        $demoTimer.Add_Tick({
+            $demoTimer.Stop()
+            $script:dbg = @{ rect = $script:rect; overlayVisible = $ov.Visible }
+            $ov.Close()
+        })
         $demoTimer.Start()
     }
 }
@@ -411,7 +383,10 @@ $ov.Activate()
 [System.Windows.Forms.Application]::Run($ov)
 
 # Emit the JSON from the MAIN flow (event-handler output would be discarded).
-if ($null -ne $script:result) {
+if ($DemoRect -ne '' -and $null -ne $script:dbg) {
+    Write-Output (ConvertTo-Json -Compress -Depth 4 $script:dbg)
+}
+elseif ($null -ne $script:result) {
     Write-Output (ConvertTo-Json -Compress $script:result)
 }
 elseif (-not $script:captured) {
