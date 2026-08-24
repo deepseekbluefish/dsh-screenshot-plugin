@@ -51,7 +51,6 @@ $HANDLE = 7     # hit tolerance around edges and corners, px
 $MIN_W  = 20    # minimum selection size, px
 $MIN_H  = 20
 $FRAME_MARGIN = 14   # frame form padding around the selection
-$HINT_H = 24         # hint strip height
 
 function New-Rect([int]$x, [int]$y, [int]$w, [int]$h) {
     return @{ X = $x; Y = $y; W = $w; H = $h }
@@ -219,14 +218,11 @@ function Update-Frame {
         return
     }
     $r = $script:rect
-    $hintBelow = ($r.Y + $r.H + $HINT_H + 6) -le $maxH
     $script:frameTopPad = $FRAME_MARGIN
-    if (-not $hintBelow) { $script:frameTopPad = $FRAME_MARGIN + $HINT_H + 4 }
     $fx = $vs.Left + $r.X - $FRAME_MARGIN
     $fy = $vs.Top + $r.Y - $script:frameTopPad
     $fw = $r.W + 2 * $FRAME_MARGIN
-    $fh = $r.H + $script:frameTopPad + $FRAME_MARGIN
-    if (-not $hintBelow) { $fh = $r.H + $script:frameTopPad + $FRAME_MARGIN }
+    $fh = $r.H + 2 * $FRAME_MARGIN
     $frame.SetBounds($fx, $fy, $fw, $fh)
     $frame.Invalidate()
     if (-not $frame.Visible) { $frame.ShowPassive() }
@@ -254,15 +250,7 @@ $frame.Add_Paint({
             $g.DrawRectangle($pen, $xx - 3, $yy - 3, 7, 7)
         }
     }
-    # hint text: no background panel, black offset shadow for readability
-    $hint = 'Double-click / Enter: confirm    Esc: cancel'
-    $font = New-Object System.Drawing.Font('Segoe UI', 9, [System.Drawing.FontStyle]::Bold)
-    $tx = $m
-    $ty = if ($pad -eq $m) { $pad + $r.H + 6 } else { 2 }
-    $shadowBrush = New-Object System.Drawing.SolidBrush([System.Drawing.Color]::Black)
-    $g.DrawString($hint, $font, $shadowBrush, $tx + 7, $ty + 3)
-    $g.DrawString($hint, $font, $whiteBrush, $tx + 6, $ty + 2)
-    $font.Dispose(); $pen.Dispose(); $penBrush.Dispose(); $whiteBrush.Dispose(); $shadowBrush.Dispose()
+    $pen.Dispose(); $penBrush.Dispose(); $whiteBrush.Dispose()
 })
 
 function Confirm-Capture {
