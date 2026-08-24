@@ -3,7 +3,7 @@
 # profile with an id-targeted config row, for example:
 #   - id: screenshot
 #     config:
-#       folder: 'D:\\MyScreenshots'
+#       folder: 'D:\MyScreenshots'
 - insert:
     - id: screenshot
       name: 'dsh-screenshot-plugin'
