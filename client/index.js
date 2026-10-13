@@ -3,14 +3,15 @@
  *
  * 在对话输入框左侧注入一个截屏小按钮：
  * 点击 → POST /api/screenshot/capture（宿主拉起全屏框选截屏）
- *      → 成功后把标记【截屏N HH:mm】写入当前会话的输入框草稿
- *      → 用户点发送，agent 即可按标记读取工作文件夹里的截图。
+ *      → 宿主把图放进 Windows 剪贴板（Bitmap + PNG）并存盘
+ *      → 用户按 Ctrl+V 把图粘贴进输入框（宿主自带的粘贴路径），发送即可。
  *
- * 填入草稿的路径（按优先级）：
- *   1. 组件 props.inputActions（会话级 slot 注入的 provide-channel props）
- *   2. ctx.sessions.provideInfo(currentId).props.inputActions
- *   3. 兜底：binding.session.prompt(..., 'queue') 直接入队消息
- * 所有步骤带屏幕内 toast 反馈，便于现场诊断；任何异常不影响应用启动。
+ * 为什么要改（2026-10-13）：
+ *   旧版用 inputActions.setDraft(marker) 把标记写进草稿。setDraft 是「整段替换」，
+ *   后果是 ① 用户截图前打的字会被顶掉 ② 只能保留一个标记（第二次截图又整段替换）。
+ *   现在不再碰草稿，也就不再依赖 setDraft / sessions 这些 DSH 内部接口——
+ *   粘贴走的是宿主自己的通道，插件面更小、更不容易被 DSH 升级打断。
+ *   PNG 照旧存盘，仅作为剪贴板失败时的兜底。
  */
 window.__ModuleLoader__.load({
   id: 'dsh-screenshot-plugin',
@@ -54,43 +55,6 @@ window.__ModuleLoader__.load({
       } catch (e) { /* toast is diagnostic only */ }
     }
 
-    function currentSessionId(ctx) {
-      try {
-        const sessions = ctx.sessions;
-        return sessions && sessions.list && sessions.list.getSnapshot().current;
-      } catch (err) {
-        console.warn('[dsh-screenshot]', 'currentSessionId failed:', err);
-        return undefined;
-      }
-    }
-
-    function resolveInputActions(ctx, props) {
-      const tries = [];
-      if (props && props.inputActions && typeof props.inputActions.setDraft === 'function') {
-        tries.push('props.inputActions');
-        return { actions: props.inputActions, via: 'props.inputActions', tries };
-      }
-      const sessions = ctx.sessions;
-      const currentId = currentSessionId(ctx);
-      if (currentId && sessions && typeof sessions.provideInfo === 'function') {
-        try {
-          const info = sessions.provideInfo(currentId);
-          const actions = info && info.props && info.props.inputActions;
-          tries.push('provideInfo=' + (info ? 'bundle' : 'undefined'));
-          if (actions && typeof actions.setDraft === 'function') {
-            return { actions, via: 'sessions.provideInfo', tries };
-          }
-          tries.push('provideInfo.props.inputActions missing, keys=' + (info && info.props ? Object.keys(info.props).join(',') : 'none'));
-        } catch (err) {
-          tries.push('provideInfo threw: ' + (err && err.message));
-          console.warn('[dsh-screenshot]', 'provideInfo failed:', err);
-        }
-      } else {
-        tries.push('no provideInfo api');
-      }
-      return { actions: null, via: null, tries };
-    }
-
     function apply(ctx) {
       try {
         const react = safeRequire('react');
@@ -110,23 +74,15 @@ window.__ModuleLoader__.load({
                 else { console.error('[dsh-screenshot]', data.error || ('HTTP ' + res.status)); showToast('截屏失败：' + (data.error || ('HTTP ' + res.status)), 'error'); }
                 return;
               }
-              showToast('截屏已保存：' + data.file, 'info');
-              const resolved = resolveInputActions(ctx, props);
-              if (resolved.actions) {
-                resolved.actions.setDraft(data.marker);
-                showToast('已填入输入框：' + data.marker + '\n（via ' + resolved.via + '）', 'ok');
-                return;
+              // Deliberately do NOT touch the composer draft any more.
+              // setDraft() replaced the whole draft: typed text was lost and only
+              // one shot could ever be held. The image is already on the Windows
+              // clipboard, so Ctrl+V uses the host's own paste path - no internal API.
+              if (data.clipboard === false) {
+                showToast('截图已保存，但写入剪贴板失败。请手动打开下面的文件复制图片：\n' + (data.path || data.file), 'error');
+              } else {
+                showToast('截图已复制到剪贴板 —— 按 Ctrl+V 粘贴进输入框即可发送\n' + data.file, 'ok');
               }
-              const currentId = currentSessionId(ctx);
-              const binding = currentId && ctx.sessions.binding ? ctx.sessions.binding(currentId) : null;
-              if (binding && binding.session) {
-                await binding.session.prompt([{ type: 'text', text: data.marker }], 'queue');
-                showToast('已作为消息入队：' + data.marker, 'ok');
-                return;
-              }
-              const detail = resolved.tries.join(' | ') || 'unknown';
-              console.error('[dsh-screenshot]', 'no draft path; tries:', detail);
-              showToast('无法填入输入框，诊断：' + detail, 'error');
             } catch (err) {
               console.error('[dsh-screenshot]', err);
               showToast('截屏处理出错：' + (err && err.message ? err.message : err), 'error');
@@ -182,7 +138,7 @@ window.__ModuleLoader__.load({
     }
 
     exports.apply = apply;
-    exports.inject = ['slots', 'sessions'];
+    exports.inject = ['slots'];
     return module.exports;
   },
 });

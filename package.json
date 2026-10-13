@@ -1,8 +1,8 @@
 {
     "name":  "dsh-screenshot-plugin",
-    "version":  "1.0.0",
+    "version":  "1.0.1",
     "type":  "module",
-    "description":  "WeChat-style in-app screenshot button for DeepSeek Harness: drag to capture a screen region, PNG saved with auto-numbering, marker [Shot N HH:mm] written into the composer.",
+    "description":  "WeChat-style in-app screenshot button for DeepSeek Harness: drag to capture a screen region, the PNG is saved with auto-numbering and copied to the Windows clipboard so Ctrl+V pastes it straight into the composer.",
     "license":  "MIT",
     "keywords":  [
                      "deepseek",

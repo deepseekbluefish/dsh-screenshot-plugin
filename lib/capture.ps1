@@ -2,7 +2,10 @@
 # STRICTLY ASCII: Windows PowerShell 5.1 reads non-BOM UTF-8 as ANSI and can
 # swallow newlines after multi-byte chars, eating code lines. No non-ASCII here.
 # Params: -Folder <save dir> [-SelfTest] [-DemoRect "x,y,w,h"] ; stdout emits JSON:
-#   {ok:true,file,path,marker} on capture, {ok:false,cancelled:true} on cancel.
+#   {ok:true,file,path,marker,clipboard} on capture, {ok:false,cancelled:true} on cancel.
+# On confirm the region is ALSO copied to the Windows clipboard as Bitmap + PNG,
+# so the user can press Ctrl+V in the DSH composer and send a real image
+# attachment instead of an ASCII marker the agent has to look up on disk.
 #
 # Interaction model:
 #   drag on the dimmed screen to draw the initial selection
@@ -153,9 +156,29 @@ function Save-And-Emit([System.Drawing.Bitmap]$bmp) {
     Set-Content -LiteralPath $CounterFile -Value ($n + 1) -NoNewline -Encoding ASCII
     $hhmm = Get-Date -Format 'HH:mm'
     $marker = "[Shot $n $hhmm]"
+    # Put the shot on the Windows clipboard so Ctrl+V in the DSH composer
+    # produces a real, visible image attachment. BOTH formats are needed:
+    # Chromium/Electron reads the 'PNG' format; SetImage alone (native
+    # System.Drawing.Bitmap only) is NOT reliably picked up by the browser.
+    # Clipboard access requires an STA thread; powershell.exe already is STA,
+    # and every failure here is non-fatal - the PNG on disk stays the fallback.
+    $clipped = $false
+    try {
+        Add-Type -AssemblyName System.Windows.Forms
+        $pngStream = New-Object System.IO.MemoryStream
+        $bmp.Save($pngStream, [System.Drawing.Imaging.ImageFormat]::Png)
+        $pngStream.Position = 0
+        $dataObj = New-Object System.Windows.Forms.DataObject
+        $dataObj.SetImage($bmp)
+        $dataObj.SetData('PNG', $pngStream)
+        [System.Windows.Forms.Clipboard]::SetDataObject($dataObj, $true)
+        $clipped = $true
+    } catch {
+        $clipped = $false
+    }
     # NOTE: no Write-Output here - event-handler output is discarded by the
     # engine. The caller stores the result and emits it from the main flow.
-    return @{ ok = $true; file = $name; path = $path; marker = $marker }
+    return @{ ok = $true; file = $name; path = $path; marker = $marker; clipboard = $clipped }
 }
 
 # ---------------- state ----------------
